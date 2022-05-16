@@ -98,10 +98,10 @@ void setup() {
 }
 
 void loop() {
-    vTaskDelay(100000000000000000);
+    delay(10);
 }
 
-void fun0(void *parameters){
+void fun0(void *parameters){ //accel
   // EventBits_t uxReturn;
   // TickType_t xTicksToWait = 100 / portTICK_PERIOD_MS;
   uint32_t syncpos=0;
@@ -154,7 +154,7 @@ void fun0(void *parameters){
   }
 }
 
-void fun1(void *parameters){
+void fun1(void *parameters){ //HR
   uint32_t syncpos=0;
   EventBits_t bits;
   for(;;){
@@ -168,7 +168,7 @@ void fun1(void *parameters){
 		if(bits!=ALL_SYNC_BITS) {  // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
 			Serial.println("\tfail to receive synct eventgroup value");
 		} else {
-			Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
+			// Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
 		}
 		syncpos++;
 
@@ -177,7 +177,7 @@ void fun1(void *parameters){
   }
 }
 
-void fun2(void *parameters){
+void fun2(void *parameters){ //SpO2
   uint32_t syncpos=0;
   EventBits_t bits;
   for(;;){
@@ -190,14 +190,14 @@ void fun2(void *parameters){
 		if(bits!=ALL_SYNC_BITS) {  // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
 			Serial.println("\tfail to receive synct eventgroup value");
 		} else {
-			Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
+			// Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
 		}
 		syncpos++;
        
   }
 }
 
-void fun3(void *parameters){
+void fun3(void *parameters){ //Firebase
   uint32_t syncpos=0;
   EventBits_t bits;
   for(;;){
@@ -210,7 +210,7 @@ void fun3(void *parameters){
 		if(bits!=ALL_SYNC_BITS) {  // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
 			Serial.println("\tfail to receive synct eventgroup value");
 		} else {
-			Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
+			// Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
 		}
 		syncpos++;
    
