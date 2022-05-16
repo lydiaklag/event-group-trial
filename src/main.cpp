@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "sdkconfig.h" //not sure if this is needed
+#include "sdkconfig.h" 
 #include "esp_system.h"
 // #include "esp_heap_alloc_caps.h
 #include "freertos/FreeRTOS.h"
@@ -27,15 +27,16 @@ const int TX2_BIT = BIT1;
 const int GROUPSYNC0_BIT = BIT0;
 const int GROUPSYNC1_BIT = BIT1;
 const int GROUPSYNC2_BIT = BIT2;
-const int ALL_SYNC_BITS = ( BIT0 | BIT1 | BIT2 );
+const int GROUPSYNC3_BIT = BIT3;
+const int ALL_SYNC_BITS = ( BIT0 | BIT1 | BIT2 | BIT3);
 // #define BIT_0 (1 << 0)
 // #define BIT_4 (1 << 4)
 //*** 1 bit/flag for each thread
-#define TASK_0_BIT        ( 1 << 0 )
-#define TASK_1_BIT        ( 1 << 1 )
-#define TASK_2_BIT        ( 1 << 2 )
+// #define TASK_0_BIT        ( 1 << 0 )
+// #define TASK_1_BIT        ( 1 << 1 )
+// #define TASK_2_BIT        ( 1 << 2 )
 
-#define ALL_SYNC_BITS ( TASK_0_BIT | TASK_1_BIT | TASK_2_BIT )
+// #define ALL_SYNC_BITS ( TASK_0_BIT | TASK_1_BIT | TASK_2_BIT )
 
 static int taskCoreHR = 1;
 static int taskCoreAccel = 0;
@@ -48,16 +49,16 @@ void loop();
 void fun0(void *parameters); //accel
 void fun1(void *parameters); //HR
 void fun2(void *parameters); //SpO2
-// void fun3(void *parameters); //firebase
+void fun3(void *parameters); //firebase
 
 void setup() {
   Serial.begin(9600);
   // xSemaphoreTake(baton, portMAX_DELAY);
   Serial.println("setting everything up\n");
   // xSemaphoreGive(baton);
-  demo_eventgroup = xEventGroupCreate();
+  EventGroupHandle = xEventGroupCreate();
 
-  if (demo_eventgroup != NULL){
+  if (EventGroupHandle != NULL){
     xTaskCreatePinnedToCore(
       fun0,
       "accel measurements 362",
@@ -84,12 +85,20 @@ void setup() {
       NULL,
       taskCoreHR
     );
+    xTaskCreatePinnedToCore(
+      fun3,
+      "firebase upload",
+      10000,
+      NULL,
+      1,
+      NULL,
+      taskCoreAccel
+    );
   }
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  delay(10);
+    vTaskDelay(100000000000000000);
 }
 
 void fun0(void *parameters){
@@ -103,11 +112,11 @@ void fun0(void *parameters){
     // xSemaphoreTake(baton, portMAX_DELAY);
     Serial.println("accel has began");
     Serial.print("t_accel: "); Serial.print(t_accel); Serial.println();
-    bits=xEventGroupSync(demo_eventgroup, GROUPSYNC0_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
+    bits=xEventGroupSync(EventGroupHandle, GROUPSYNC0_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
 		if(bits!=ALL_SYNC_BITS) {  // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
 			Serial.println("\tfail to receive synct eventgroup value");
 		} else {
-			Serial.println("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
+			Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
 		}
 		syncpos++;
     // xSemaphoreGive(baton); //in order to write well in serial monitor, as it is a common resource
@@ -155,25 +164,15 @@ void fun1(void *parameters){
     Serial.println("HR has began");
     Serial.print("t_HR: "); Serial.print(t_HR); Serial.println();
     // xSemaphoreGive(baton);
-    bits=xEventGroupSync(demo_eventgroup, GROUPSYNC1_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
+    bits=xEventGroupSync(EventGroupHandle, GROUPSYNC1_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
 		if(bits!=ALL_SYNC_BITS) {  // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
 			Serial.println("\tfail to receive synct eventgroup value");
 		} else {
-			Serial.println("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
+			Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
 		}
 		syncpos++;
 
-    /* Set bit 1 in the event group to note this task has reached the
-    synchronisation point.  The other two tasks will set the other two
-    bits defined by ALL_SYNC_BITS.  All three tasks have reached the
-    synchronisation point when all the ALL_SYNC_BITS are set.  Wait
-    indefinitely for this to happen. */
-    //   Serial.print("txpos_accel: "); Serial.print(txpos); Serial.println();
-    // xEventGroupSetBits(EventGroupHandle, TX1_BIT);
-    // xEventGroupSync( xEventBits, TASK_1_BIT, ALL_SYNC_BITS, portMAX_DELAY );
-    /* xEventGroupSync() was called with an indefinite block time, so
-    this task will only reach here if the syncrhonisation was made by all
-    three tasks, so there is no need to test the return value. */
+  
     
   }
 }
@@ -182,27 +181,39 @@ void fun2(void *parameters){
   uint32_t syncpos=0;
   EventBits_t bits;
   for(;;){
-    vTaskDelay(1000/portTICK_PERIOD_MS); //5 seconds
+    vTaskDelay(1000/portTICK_PERIOD_MS); //1000 milliseconds
     double t_SpO2 = millis();  
     // xSemaphoreTake(baton, portMAX_DELAY);
     Serial.println("SpO2 has began");
     Serial.print("t_SpO2: "); Serial.print(t_SpO2); Serial.println();
-    bits=xEventGroupSync(demo_eventgroup, GROUPSYNC2_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
+    bits=xEventGroupSync(EventGroupHandle, GROUPSYNC2_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
 		if(bits!=ALL_SYNC_BITS) {  // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
 			Serial.println("\tfail to receive synct eventgroup value");
 		} else {
-			Serial.println("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
+			Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
 		}
 		syncpos++;
-    // xSemaphoreGive(baton);
-    /* Set bit 2 in the event group to note this task has reached the
-    synchronisation point.  The other two tasks will set the other two
-    bits defined by ALL_SYNC_BITS.  All three tasks have reached the
-    synchronisation point when all the ALL_SYNC_BITS are set.  Wait
-    indefinitely for this to happen. */
-    // xEventGroupSync( xEventBits, TASK_2_BIT, ALL_SYNC_BITS, portMAX_DELAY );
+       
+  }
+}
 
-    
+void fun3(void *parameters){
+  uint32_t syncpos=0;
+  EventBits_t bits;
+  for(;;){
+    vTaskDelay(1000/portTICK_PERIOD_MS); //5 seconds
+    double t_firebase = millis();  
+    // xSemaphoreTake(baton, portMAX_DELAY);
+    Serial.println("Firebase has began");
+    Serial.print("t_firebase: "); Serial.print(t_firebase); Serial.println();
+    bits=xEventGroupSync(EventGroupHandle, GROUPSYNC3_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
+		if(bits!=ALL_SYNC_BITS) {  // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
+			Serial.println("\tfail to receive synct eventgroup value");
+		} else {
+			Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
+		}
+		syncpos++;
+   
   }
 }
 
