@@ -113,8 +113,8 @@ int arr_z[num_samples_accel];
 double final_x, final_y, final_z, final_temp;
 // int i = 0;
 double sumx = 0, sumy = 0, sumz = 0;
-int count_accel = 0, count_HR = 0; // for firebase
-double t_HR = 0, t_accel = 0;      // for firebase
+int count_accel = 0, count_HR = 0, count_SpO2 = 0; // for firebase
+double t_HR = 0, t_accel = 0, t_SpO2 = 0;      // for firebase
 
 // declaring functions
 void iir_ma_filter_for_hr();
@@ -424,7 +424,7 @@ void loopHR(void *parameters)
     // could we need a tiny delay here?
     //  delay(10);
     // or better vTaskDelay
-    vTaskDelay(10 / portTICK_PERIOD_MS); // just 10ms delay
+    // vTaskDelay(10 / portTICK_PERIOD_MS); // just 10ms delay
   }
 }
 /* SpO2
@@ -436,7 +436,7 @@ void loopSpO2(void *parameters)
   for (;;)
   {
     vTaskDelay(1000 / portTICK_PERIOD_MS); // 1000 milliseconds
-    double t_SpO2 = millis();
+    t_SpO2 = millis();
     // xSemaphoreTake(baton, portMAX_DELAY);
     // Serial.println("SpO2 has began");
     Serial.print("t_SpO2: ");
@@ -591,6 +591,7 @@ void loopSpO2(void *parameters)
       // Serial.print("\tgroupsync_task1 get sync eventgroup from all tasks"); Serial.print(syncpos); Serial.println();
     }
     syncpos++;
+    count_SpO2++;
   }
 }
 /* Firebase
@@ -716,6 +717,48 @@ void loopFirebase(void *parameters)
       }
       // now for time data HR
       if (Firebase.RTDB.setFloat(&fbdo, "HR/t_HR", t_HR))
+      {
+        Serial.print(" ");
+        // Serial.println("PASSED");
+        // Serial.println("PATH: " + fbdo.dataPath());
+        // Serial.println("TYPE: " + fbdo.dataType());
+      }
+      else
+      {
+        Serial.print(" ");
+        // Serial.println("FAILED");
+        // Serial.println("REASON: " + fbdo.errorReason());
+      }
+      if (Firebase.RTDB.setFloat(&fbdo, "SpO2/SpO2", SpO2))
+      {
+        Serial.print(" ");
+        // Serial.println("PASSED");
+        // Serial.println("PATH: " + fbdo.dataPath());
+        // Serial.println("TYPE: " + fbdo.dataType());
+        // if it is all good with sending the HR measurements in firebase, then update the count_HR
+        if (Firebase.RTDB.setInt(&fbdo, "SpO2/count", count_SpO2))
+        {
+          Serial.print(" ");
+          // Serial.println("PASSED");
+          // Serial.println("PATH: " + fbdo.dataPath());
+          // Serial.println("TYPE: " + fbdo.dataType());
+        }
+        else
+        {
+          Serial.print(" ");
+          // Serial.println("FAILED");
+          // Serial.println("REASON: " + fbdo.errorReason());
+        }
+        count_SpO2++;
+      }
+      else
+      {
+        Serial.print(" ");
+        // Serial.println("FAILED");
+        // Serial.println("REASON: " + fbdo.errorReason());
+      }
+      // now for time data HR
+      if (Firebase.RTDB.setFloat(&fbdo, "SpO2/t_SpO2", t_SpO2))
       {
         Serial.print(" ");
         // Serial.println("PASSED");
