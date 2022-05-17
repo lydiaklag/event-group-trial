@@ -159,18 +159,18 @@ void setup()
   // now that I changed the value to 0xFF it means that all the LEDs are on at the same time
   //***Firebase section
     connectToWiFi(&aaa);
-    config.api_key = API_KEY;
-    config.database_url = DATABASE_URL;
-    if (Firebase.signUp(&config, &auth, "", "")){
-      Serial.println("Firebase connection ok");
-      signupOK = true;
-    }
-    else{
-      Serial.printf("%s\n", config.signer.signupError.message.c_str());
-    }
-    config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
-    Firebase.begin(&config, &auth);
-    Firebase.reconnectWiFi(true);
+    // config.api_key = API_KEY;
+    // config.database_url = DATABASE_URL;
+    // if (Firebase.signUp(&config, &auth, "", "")){
+    //   Serial.println("Firebase connection ok");
+    //   signupOK = true;
+    // }
+    // else{
+    //   Serial.printf("%s\n", config.signer.signupError.message.c_str());
+    // }
+    // config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
+    // Firebase.begin(&config, &auth);
+    // Firebase.reconnectWiFi(true);
 
   ///***for accelerometer
   xl.begin(5);
@@ -387,6 +387,16 @@ void loopHR(void *parameters)
     Serial.print("t_HR: ");
     Serial.print(t_HR);
     Serial.println();
+    if (flag_movement)
+    {
+      Sensor.setPulseAmplitudeRed(0); //I turn off the IR and the red LEDs
+      Sensor.setPulseAmplitudeIR(0);    
+    }
+    else
+    {
+      Sensor.setPulseAmplitudeRed(0xFF); //turn on red
+      Sensor.setPulseAmplitudeIR(0xFF); //turn on ir //green stays on in all occasions
+    }
     int flag = readSamples();
     Serial.println();
     Serial.println("----------------------------------------------------------------------------------------------------");
@@ -424,11 +434,10 @@ void loopHR(void *parameters)
     // could we need a tiny delay here?
     //  delay(10);
     // or better vTaskDelay
-    // vTaskDelay(10 / portTICK_PERIOD_MS); // just 10ms delay
+    // vTaskDelay(10 / portTICK_PERIOD_MS); // just 10ms delay. no need, no reason
   }
 }
-/* SpO2
-  // need to rename this task, also in declaration and in setup */
+/* SpO2 */
 void loopSpO2(void *parameters)
 {
   uint32_t syncpos = 0;
@@ -442,7 +451,7 @@ void loopSpO2(void *parameters)
     Serial.print("t_SpO2: ");
     Serial.print(t_SpO2);
     Serial.println();
-    if (flag_unplugged = 1)
+    if (flag_movement != 1)
     { // calculate the SpO2 only if the finger is plugged, name of the flag is counterintuitive
       int mean_ir = Find_Mean(0, Num_Samples, ma_ir2_buffer);
       int mean_red = Find_Mean(0, Num_Samples, ma_red_buffer);
@@ -565,7 +574,7 @@ void loopSpO2(void *parameters)
       SpO2 = int(round(SpO2_next));
       if (flag_unplugged == 0 || HR == 0)
       { // if unplugged show this
-        // SpO2 = 0; //this is probably not needed
+        SpO2 = 0; //to show at firebase
         Serial.println();
         Serial.println("SpO2 : unplugged");
       }
@@ -581,6 +590,11 @@ void loopSpO2(void *parameters)
       // Serial.println(); Serial.print("time to run the SpO2 task: "); Serial.print(millis() - t_SP); Serial.println(); // I want to measure how long does it take for SpO2 task to run
       // vTaskDelay(Sampling_Time / portTICK_PERIOD_MS);
     }
+    else
+    {
+      Serial.print("\n \tcan't measure SpO2 because there is movement.\n");
+      SpO2=0;
+    }
     bits = xEventGroupSync(EventGroupHandle, GROUPSYNC2_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
     if (bits != ALL_SYNC_BITS)
     { // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
@@ -594,8 +608,7 @@ void loopSpO2(void *parameters)
     count_SpO2++;
   }
 }
-/* Firebase
-  // need to rename task */
+/* Firebase */
 void loopFirebase(void *parameters)
 {
   uint32_t syncpos = 0;
@@ -610,168 +623,169 @@ void loopFirebase(void *parameters)
     Serial.print(t_firebase);
     Serial.println();
     // // doublecheck if the names of the variables are ok
-    if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 4000 || sendDataPrevMillis == 0))
-    { // it sends a new value to firebase every 15 seconds
-      sendDataPrevMillis = millis();
-      // Write an Float number on the database path test/float
-      if (Firebase.RTDB.setFloat(&fbdo, "accel/XValue accel", XValue))
-      {
-        Serial.print(" ");
-        // if (Firebase.RTDB.setFloat(&fbdo, "test/float", 0.01 + random(0,100))){
-        //  Serial.println("PASSED");
-        //  Serial.println("PATH: " + fbdo.dataPath());
-        //  Serial.println("TYPE: " + fbdo.dataType());
-        // if the x value has been sent successfully to firebase, then update the count_accel
-        if (Firebase.RTDB.setInt(&fbdo, "accel/count", count_accel))
-        {
-          Serial.print(" ");
-          // Serial.println("PASSED");
-          // Serial.println("PATH: " + fbdo.dataPath());
-          // Serial.println("TYPE: " + fbdo.dataType());
-        }
-        else
-        {
-          Serial.print(" ");
-          // Serial.println("FAILED");
-          // Serial.println("REASON: " + fbdo.errorReason());
-        }
-        count_accel++;
-      }
-      else
-      {
-        Serial.print(" ");
-        // Serial.println("FAILED");
-        // Serial.println("REASON: " + fbdo.errorReason());
-      }
-      // now for Y data accel
-      if (Firebase.RTDB.setFloat(&fbdo, "accel/YValue accel", YValue))
-      {
-        Serial.print(" ");
-        // Serial.println("PASSED");
-        // Serial.println("PATH: " + fbdo.dataPath());
-        // Serial.println("TYPE: " + fbdo.dataType());
-      }
-      else
-      {
-        Serial.print(" ");
-        // Serial.println("FAILED");
-        // Serial.println("REASON: " + fbdo.errorReason());
-      }
-      // now for Z data accel
-      if (Firebase.RTDB.setFloat(&fbdo, "accel/ZValue accel", ZValue))
-      {
-        Serial.print(" ");
-        // Serial.println("PASSED");
-        // Serial.println("PATH: " + fbdo.dataPath());
-        // Serial.println("TYPE: " + fbdo.dataType());
-      }
-      else
-      {
-        Serial.print(" ");
-        // Serial.println("FAILED");
-        // Serial.println("REASON: " + fbdo.errorReason());
-      }
-      // now for time data accel
-      if (Firebase.RTDB.setFloat(&fbdo, "accel/t_accel", t_accel))
-      {
-        Serial.print(" ");
-        // Serial.println("PASSED");
-        // Serial.println("PATH: " + fbdo.dataPath());
-        // Serial.println("TYPE: " + fbdo.dataType());
-      }
-      else
-      {
-        Serial.print(" ");
-        // Serial.println("FAILED");
-        // Serial.println("REASON: " + fbdo.errorReason());
-      }
-      // now the same for HR measurements
-      // now for HR data
-      if (Firebase.RTDB.setFloat(&fbdo, "HR/HR", HR))
-      {
-        Serial.print(" ");
-        // Serial.println("PASSED");
-        // Serial.println("PATH: " + fbdo.dataPath());
-        // Serial.println("TYPE: " + fbdo.dataType());
-        // if it is all good with sending the HR measurements in firebase, then update the count_HR
-        if (Firebase.RTDB.setInt(&fbdo, "HR/count", count_HR))
-        {
-          Serial.print(" ");
-          // Serial.println("PASSED");
-          // Serial.println("PATH: " + fbdo.dataPath());
-          // Serial.println("TYPE: " + fbdo.dataType());
-        }
-        else
-        {
-          Serial.print(" ");
-          // Serial.println("FAILED");
-          // Serial.println("REASON: " + fbdo.errorReason());
-        }
-        count_HR++;
-      }
-      else
-      {
-        Serial.print(" ");
-        // Serial.println("FAILED");
-        // Serial.println("REASON: " + fbdo.errorReason());
-      }
-      // now for time data HR
-      if (Firebase.RTDB.setFloat(&fbdo, "HR/t_HR", t_HR))
-      {
-        Serial.print(" ");
-        // Serial.println("PASSED");
-        // Serial.println("PATH: " + fbdo.dataPath());
-        // Serial.println("TYPE: " + fbdo.dataType());
-      }
-      else
-      {
-        Serial.print(" ");
-        // Serial.println("FAILED");
-        // Serial.println("REASON: " + fbdo.errorReason());
-      }
-      if (Firebase.RTDB.setFloat(&fbdo, "SpO2/SpO2", SpO2))
-      {
-        Serial.print(" ");
-        // Serial.println("PASSED");
-        // Serial.println("PATH: " + fbdo.dataPath());
-        // Serial.println("TYPE: " + fbdo.dataType());
-        // if it is all good with sending the HR measurements in firebase, then update the count_HR
-        if (Firebase.RTDB.setInt(&fbdo, "SpO2/count", count_SpO2))
-        {
-          Serial.print(" ");
-          // Serial.println("PASSED");
-          // Serial.println("PATH: " + fbdo.dataPath());
-          // Serial.println("TYPE: " + fbdo.dataType());
-        }
-        else
-        {
-          Serial.print(" ");
-          // Serial.println("FAILED");
-          // Serial.println("REASON: " + fbdo.errorReason());
-        }
-        count_SpO2++;
-      }
-      else
-      {
-        Serial.print(" ");
-        // Serial.println("FAILED");
-        // Serial.println("REASON: " + fbdo.errorReason());
-      }
-      // now for time data HR
-      if (Firebase.RTDB.setFloat(&fbdo, "SpO2/t_SpO2", t_SpO2))
-      {
-        Serial.print(" ");
-        // Serial.println("PASSED");
-        // Serial.println("PATH: " + fbdo.dataPath());
-        // Serial.println("TYPE: " + fbdo.dataType());
-      }
-      else
-      {
-        Serial.print(" ");
-        // Serial.println("FAILED");
-        // Serial.println("REASON: " + fbdo.errorReason());
-      }
-    }
+    //start commenting from here to speed up the program
+    // if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 4000 || sendDataPrevMillis == 0))
+    // { // it sends a new value to firebase every 15 seconds
+    //   sendDataPrevMillis = millis();
+    //   // Write an Float number on the database path test/float
+    //   if (Firebase.RTDB.setFloat(&fbdo, "accel/XValue accel", XValue))
+    //   {
+    //     Serial.print(" ");
+    //     // if (Firebase.RTDB.setFloat(&fbdo, "test/float", 0.01 + random(0,100))){
+    //     //  Serial.println("PASSED");
+    //     //  Serial.println("PATH: " + fbdo.dataPath());
+    //     //  Serial.println("TYPE: " + fbdo.dataType());
+    //     // if the x value has been sent successfully to firebase, then update the count_accel
+    //     if (Firebase.RTDB.setInt(&fbdo, "accel/count", count_accel))
+    //     {
+    //       Serial.print(" ");
+    //       // Serial.println("PASSED");
+    //       // Serial.println("PATH: " + fbdo.dataPath());
+    //       // Serial.println("TYPE: " + fbdo.dataType());
+    //     }
+    //     else
+    //     {
+    //       Serial.print(" ");
+    //       // Serial.println("FAILED");
+    //       // Serial.println("REASON: " + fbdo.errorReason());
+    //     }
+    //     count_accel++;
+    //   }
+    //   else
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("FAILED");
+    //     // Serial.println("REASON: " + fbdo.errorReason());
+    //   }
+    //   // now for Y data accel
+    //   if (Firebase.RTDB.setFloat(&fbdo, "accel/YValue accel", YValue))
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("PASSED");
+    //     // Serial.println("PATH: " + fbdo.dataPath());
+    //     // Serial.println("TYPE: " + fbdo.dataType());
+    //   }
+    //   else
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("FAILED");
+    //     // Serial.println("REASON: " + fbdo.errorReason());
+    //   }
+    //   // now for Z data accel
+    //   if (Firebase.RTDB.setFloat(&fbdo, "accel/ZValue accel", ZValue))
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("PASSED");
+    //     // Serial.println("PATH: " + fbdo.dataPath());
+    //     // Serial.println("TYPE: " + fbdo.dataType());
+    //   }
+    //   else
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("FAILED");
+    //     // Serial.println("REASON: " + fbdo.errorReason());
+    //   }
+    //   // now for time data accel
+    //   if (Firebase.RTDB.setFloat(&fbdo, "accel/t_accel", t_accel))
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("PASSED");
+    //     // Serial.println("PATH: " + fbdo.dataPath());
+    //     // Serial.println("TYPE: " + fbdo.dataType());
+    //   }
+    //   else
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("FAILED");
+    //     // Serial.println("REASON: " + fbdo.errorReason());
+    //   }
+    //   // now the same for HR measurements
+    //   // now for HR data
+    //   if (Firebase.RTDB.setFloat(&fbdo, "HR/HR", HR))
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("PASSED");
+    //     // Serial.println("PATH: " + fbdo.dataPath());
+    //     // Serial.println("TYPE: " + fbdo.dataType());
+    //     // if it is all good with sending the HR measurements in firebase, then update the count_HR
+    //     if (Firebase.RTDB.setInt(&fbdo, "HR/count", count_HR))
+    //     {
+    //       Serial.print(" ");
+    //       // Serial.println("PASSED");
+    //       // Serial.println("PATH: " + fbdo.dataPath());
+    //       // Serial.println("TYPE: " + fbdo.dataType());
+    //     }
+    //     else
+    //     {
+    //       Serial.print(" ");
+    //       // Serial.println("FAILED");
+    //       // Serial.println("REASON: " + fbdo.errorReason());
+    //     }
+    //     count_HR++;
+    //   }
+    //   else
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("FAILED");
+    //     // Serial.println("REASON: " + fbdo.errorReason());
+    //   }
+    //   // now for time data HR
+    //   if (Firebase.RTDB.setFloat(&fbdo, "HR/t_HR", t_HR))
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("PASSED");
+    //     // Serial.println("PATH: " + fbdo.dataPath());
+    //     // Serial.println("TYPE: " + fbdo.dataType());
+    //   }
+    //   else
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("FAILED");
+    //     // Serial.println("REASON: " + fbdo.errorReason());
+    //   }
+    //   if (Firebase.RTDB.setFloat(&fbdo, "SpO2/SpO2", SpO2))
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("PASSED");
+    //     // Serial.println("PATH: " + fbdo.dataPath());
+    //     // Serial.println("TYPE: " + fbdo.dataType());
+    //     // if it is all good with sending the HR measurements in firebase, then update the count_HR
+    //     if (Firebase.RTDB.setInt(&fbdo, "SpO2/count", count_SpO2))
+    //     {
+    //       Serial.print(" ");
+    //       // Serial.println("PASSED");
+    //       // Serial.println("PATH: " + fbdo.dataPath());
+    //       // Serial.println("TYPE: " + fbdo.dataType());
+    //     }
+    //     else
+    //     {
+    //       Serial.print(" ");
+    //       // Serial.println("FAILED");
+    //       // Serial.println("REASON: " + fbdo.errorReason());
+    //     }
+    //     count_SpO2++;
+    //   }
+    //   else
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("FAILED");
+    //     // Serial.println("REASON: " + fbdo.errorReason());
+    //   }
+    //   // now for time data HR
+    //   if (Firebase.RTDB.setFloat(&fbdo, "SpO2/t_SpO2", t_SpO2))
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("PASSED");
+    //     // Serial.println("PATH: " + fbdo.dataPath());
+    //     // Serial.println("TYPE: " + fbdo.dataType());
+    //   }
+    //   else
+    //   {
+    //     Serial.print(" ");
+    //     // Serial.println("FAILED");
+    //     // Serial.println("REASON: " + fbdo.errorReason());
+    //   }
+    // }
 //comment until here :) 
 
       bits = xEventGroupSync(EventGroupHandle, GROUPSYNC3_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
