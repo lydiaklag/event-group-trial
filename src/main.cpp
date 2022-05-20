@@ -30,6 +30,8 @@
 // Your Firebase Realtime database URL
 #define DATABASE_URL "https://accel-42dfb-default-rtdb.europe-west1.firebasedatabase.app/"
 
+
+TaskHandle_t myIntTaskHandle = NULL;
 EventGroupHandle_t demo_eventgroup;
 const int TX1_BIT = BIT0;
 const int TX2_BIT = BIT1;
@@ -135,6 +137,17 @@ void loop();
 void loopSpO2(void *parameters); // SpO2
 void loopFirebase(void *parameters); // firebase
 
+
+void myIntTask(void *p){
+  while(1){
+    vTaskSuspend(NULL); //this interrupt task suspends itself
+    //here I turn off the red,IR led
+    Serial.print("\t i turn off the red, ir LED.\n");
+    //
+  }
+}
+
+
 void setup()
 {
   Serial.begin(9600);
@@ -216,6 +229,7 @@ void setup()
 
 void loop()
 {
+  vTaskDelete(NULL); //delete this task to save resources
   delay(10);
 }
 
