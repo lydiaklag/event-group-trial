@@ -33,7 +33,7 @@
 
 TaskHandle_t myIntTaskHandle = NULL;
 EventGroupHandle_t demo_eventgroup;
-const int TX1_BIT = BIT0;
+const int TX1_BIT = BIT4; //for the accel flag movement
 const int TX2_BIT = BIT1;
 const int GROUPSYNC0_BIT = BIT0;
 const int GROUPSYNC1_BIT = BIT1;
@@ -138,14 +138,7 @@ void loopSpO2(void *parameters); // SpO2
 void loopFirebase(void *parameters); // firebase
 
 
-void myIntTask(void *p){
-  while(1){
-    vTaskSuspend(NULL); //this interrupt task suspends itself
-    //here I turn off the red,IR led
-    Serial.print("\t i turn off the red, ir LED.\n");
-    //
-  }
-}
+
 
 
 void setup()
@@ -224,13 +217,31 @@ void setup()
         1,
         NULL,
         taskCoreAccel);
+  //   xTaskCreatePinnedToCore(
+  //       myIntTask, 
+  //       "interrupt task",
+  //       200,
+  //       NULL,
+  //       1,
+  //       &myIntTaskHandle,
+  //       taskCoreAccel
+  //   );
+  }
+}
+
+void myIntTask(void *p){
+  while(1){
+    vTaskSuspend(NULL); //this interrupt task suspends itself
+    //here I turn off the red,IR led
+    Serial.print("\t i turn off the red, ir LED.\n");
+    // Sensor.setPulseAmplitudeRed(0); 
+    // Sensor.setPulseAmplitudeIR(0);  
   }
 }
 
 void loop()
 {
   vTaskDelete(NULL); //delete this task to save resources
-  delay(10);
 }
 
 void connectToWiFi(void *parameters)
@@ -270,6 +281,7 @@ void measurementsAccel(void *parameters)
   // TickType_t xTicksToWait = 100 / portTICK_PERIOD_MS;
   uint32_t syncpos = 0;
   EventBits_t bits;
+  // double t_off; //time that red and ir stay off because of movement
   for (;;)
   {
     vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -312,32 +324,30 @@ void measurementsAccel(void *parameters)
     final_y = sumy / num_samples_accel;
     final_z = sumz / num_samples_accel;
     // distance = sqrt(pow(final_x, 2) + pow(final_y, 2) + pow(final_z,2));
-    if (flag_movement == 1)
+    if (flag_movement)
     { // do something in the HR loop
       Serial.println("there was some movement...");
-      Serial.print("\tx: ");
-      Serial.print(final_x);
-      Serial.print(" ");
-      Serial.print("\ty: ");
-      Serial.print(final_y);
-      Serial.print(" ");
-      Serial.print("\tz: ");
-      Serial.print(final_z);
-      Serial.print(" \n");
+      Serial.print("\tx: ");    Serial.print(final_x);    Serial.print(" ");
+      Serial.print("\ty: ");    Serial.print(final_y);    Serial.print(" ");
+      Serial.print("\tz: ");    Serial.print(final_z);    Serial.print(" \n");
+      
+      Sensor.setPulseAmplitudeRed(0); //I turn off the IR and the red LEDs
+      Sensor.setPulseAmplitudeIR(0);  
+      // t_off = millis();
+      Serial.print("\tt_off: ");    Serial.print(t_accel);    Serial.print(" \n");
     }
     else
     {
       Serial.println("no movement");
-      Serial.print("\tx: ");
-      Serial.print(final_x);
-      Serial.print(" ");
-      Serial.print("\ty: ");
-      Serial.print(final_y);
-      Serial.print(" ");
-      Serial.print("\tz: ");
-      Serial.print(final_z);
-      Serial.print(" \n");
+      Serial.print("\tx: ");    Serial.print(final_x);    Serial.print(" ");
+      Serial.print("\ty: ");    Serial.print(final_y);    Serial.print(" ");
+      Serial.print("\tz: ");    Serial.print(final_z);    Serial.print(" \n");
+
+      Sensor.setPulseAmplitudeRed(0xFF); //turn on red
+      Sensor.setPulseAmplitudeIR(0xFF); //turn on ir //green stays on in all occasions
+      Serial.print("\tred, ir are on again t_off: ");    Serial.print(t_accel);    Serial.print(" \n");
     }
+    xEventGroupSetBits(EventGroupHandle, TX1_BIT); //to set the bit to unlock the HR and the SpO2 task
     // until here it is the functional code of the thread, now I checkin with other threads
     bits = xEventGroupSync(EventGroupHandle, GROUPSYNC0_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
     if (bits != ALL_SYNC_BITS)
@@ -391,6 +401,7 @@ void loopHR(void *parameters)
 { // HR
   uint32_t syncpos = 0;
   EventBits_t bits;
+  EventBits_t xEventGroupValue;
   for (;;)
   {
     vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -401,19 +412,20 @@ void loopHR(void *parameters)
     Serial.print("t_HR: ");
     Serial.print(t_HR);
     Serial.println();
-    if (flag_movement)
-    {
-      Sensor.setPulseAmplitudeRed(0); //I turn off the IR and the red LEDs
-      Sensor.setPulseAmplitudeIR(0);    
-    }
-    else
-    {
-      Sensor.setPulseAmplitudeRed(0xFF); //turn on red
-      Sensor.setPulseAmplitudeIR(0xFF); //turn on ir //green stays on in all occasions
-    }
+    //will remove it here, put it in accel
+    // if (flag_movement)
+    // {
+    //   Sensor.setPulseAmplitudeRed(0); //I turn off the IR and the red LEDs
+    //   Sensor.setPulseAmplitudeIR(0);    
+    // }
+    // else
+    // {
+    //   Sensor.setPulseAmplitudeRed(0xFF); //turn on red
+    //   Sensor.setPulseAmplitudeIR(0xFF); //turn on ir //green stays on in all occasions
+    // }
+    xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
+    //this means tha tthe HR task waits to see if there is movement from the accel task
     int flag = readSamples();
-    Serial.println();
-    Serial.println("----------------------------------------------------------------------------------------------------");
     if (flag)
     { //***if sensor reads real data
       iir_ma_filter_for_hr();
@@ -423,16 +435,18 @@ void loopHR(void *parameters)
       Serial.print("NEW DATA--> ");
       Serial.print("HR: ");
       Serial.print(HR);
-      Serial.println();
-      flag_unplugged = 1;
+      // flag_unplugged = 1;
     }
     else
     { //***else if sensor is unplugged
-      flag_unplugged = 0;
+      // flag_unplugged = 0;
       HR = 0;
       Serial.print("HR : unplugged");
-      Serial.println();
     }
+    Serial.print("\nthe HR task took to execute: ms : "); Serial.print(millis() - t_HR); Serial.println();
+    Serial.println();
+    Serial.println("----------------------------------------------------------------------------------------------------");
+
     // xSemaphoreGive(baton);
     bits = xEventGroupSync(EventGroupHandle, GROUPSYNC1_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
     if (bits != ALL_SYNC_BITS)
@@ -456,6 +470,7 @@ void loopSpO2(void *parameters)
 {
   uint32_t syncpos = 0;
   EventBits_t bits;
+  EventBits_t xEventGroupValue;
   for (;;)
   {
     vTaskDelay(1000 / portTICK_PERIOD_MS); // 1000 milliseconds
@@ -465,6 +480,8 @@ void loopSpO2(void *parameters)
     Serial.print("t_SpO2: ");
     Serial.print(t_SpO2);
     Serial.println();
+    xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
+    //this means tha tthe HR task waits to see if there is movement from the accel task
     if (flag_movement != 1)
     { // calculate the SpO2 only if the finger is plugged, name of the flag is counterintuitive
       int mean_ir = Find_Mean(0, Num_Samples, ma_ir2_buffer);
@@ -609,6 +626,7 @@ void loopSpO2(void *parameters)
       Serial.print("\n \tcan't measure SpO2 because there is movement.\n");
       SpO2=0;
     }
+    Serial.print("the SpO2 task took to execute: ms : "); Serial.print(millis() - t_SpO2); Serial.println();
     bits = xEventGroupSync(EventGroupHandle, GROUPSYNC2_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
     if (bits != ALL_SYNC_BITS)
     { // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
@@ -636,6 +654,7 @@ void loopFirebase(void *parameters)
     Serial.print("t_firebase: ");
     Serial.print(t_firebase);
     Serial.println();
+    // xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
     // // doublecheck if the names of the variables are ok
     //start commenting from here to speed up the program
     // if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 4000 || sendDataPrevMillis == 0))
