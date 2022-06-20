@@ -20,10 +20,25 @@
 #include "addons/TokenHelper.h"
 #include "addons/RTDBHelper.h"
 
-#define WIFI_NETWORK "secret passage_plus" // the name of the wifi network //at lab it is ESP_Test
-#define WIFI_PASSWORD "Afra!17p89#"        // at lab it is esp8266_test
+#include <ESPAsyncWebServer.h>
+#include <SPIFFS.h>
+#include <Adafruit_Sensor.h>
+
+#include <HTTPSServer.hpp>
+#include <SSLCert.hpp>
+#include <HTTPRequest.hpp>
+#include <HTTPResponse.hpp>
+
+
+// #define WIFI_NETWORK "secret passage_plus" // the name of the wifi network //at lab it is ESP_Test
+// #define WIFI_PASSWORD "Afra!17p89#"        // at lab it is esp8266_test
+// #define WIFI_TIMEOUT_MS 20000
+// #define WIFI_SSID "secret passage_plus"
+
+#define WIFI_NETWORK "YellowCafe" 
+#define WIFI_PASSWORD "Colombia1"        
 #define WIFI_TIMEOUT_MS 20000
-#define WIFI_SSID "secret passage_plus"
+#define WIFI_SSID "YellowCafe"
 
 // Your Firebase Project Web API Key
 #define API_KEY "AIzaSyAIE_5ozQRoAcZaprySgTDVu_YB7QJycik"
@@ -33,7 +48,8 @@
 
 TaskHandle_t myIntTaskHandle = NULL;
 EventGroupHandle_t demo_eventgroup;
-const int TX1_BIT = BIT4; //for the accel flag movement
+const int TX1_BIT = BIT4; //for the accel flag movement to HR
+const int TX3_BIT = BIT5; //from HR to SpO2 task
 const int TX2_BIT = BIT1;
 const int GROUPSYNC0_BIT = BIT0;
 const int GROUPSYNC1_BIT = BIT1;
@@ -75,7 +91,7 @@ int Num_Points = 2 * Moving_Average_Num + 1; //***5-point moving average filter
 int Sum_Points;
 void *ax;
 int Sampling_Time = 2400; // 2400ms = 4s
-int flag_unplugged = 0;   // 0 means unplugged
+int flag_unplugged = 1;   // 0 means unplugged
 // regarding SpO2, initialising global variables
 const int points_spo2 = 4;
 double SpO2_dc_ir[points_spo2]; // no need to initialise the arrays, that is done inside the SpO2 func
@@ -100,15 +116,16 @@ bool signupOK = false;
 // int Sampling_Time = 2400;  //(sampl_time =40ms-->25 samples/sec--> fs=25Hz
 int Sampling_Time_accel = 500; // now I made the accel freq f=2hz or T = 0.5s) //because the HR task takes 5,03s to get a result
 // that means that for each second, I take 2 samples (2 Hz = 2 samples/s)
-int flag_movement = 0; // that means that there is no movement
+int flag_movement = 0; // if 0 : no movement. if 1 : movement
 // when we detect movement, the variable movement will become 1, then we will turn off the red, IR LED (HR task)
+int flag; // to see if finger is plugged 
 
 ADXL362 xl;
 int16_t XValue, YValue, ZValue, Temperature;
 // void *a;
 static int taskCore = 1;
 int distance;
-const int num_samples_accel = 9;
+const int num_samples_accel = 9; //make it smaller 
 int arr_x[num_samples_accel];
 int arr_y[num_samples_accel];
 int arr_z[num_samples_accel];
@@ -117,6 +134,8 @@ double final_x, final_y, final_z, final_temp;
 double sumx = 0, sumy = 0, sumz = 0;
 int count_accel = 0, count_HR = 0, count_SpO2 = 0; // for firebase
 double t_HR = 0, t_accel = 0, t_SpO2 = 0;      // for firebase
+double eucl_d;
+AsyncWebServer server(80);
 
 // declaring functions
 void iir_ma_filter_for_hr();
@@ -132,14 +151,77 @@ void measurementsAccel(void *parameter);
 void connectToWiFi(void *parameters);
 void setup();
 void loop();
-// void fun0(void *parameters); //accel
-// void fun1(void *parameters); //HR
 void loopSpO2(void *parameters); // SpO2
 void loopFirebase(void *parameters); // firebase
+String read_Z();
+String read_Y();
+String read_X();
+String read_HR_data();
+String read_SPo2_data();
+String read_eucl_d();
 
+String read_Z() {
+  // float temp = xl.readZData();
+  // if (isnan(temp)) {    
+  //   Serial.println("Failed to read from BME280 sensor!");
+  //   return "";
+  // }
+  // else {
+    // int16_t XValue, YValue, ZValue, Temperature;
+  // xl.readXYZTData(XValue, YValue, ZValue, Temperature);
+  // // float(ZValue);
+  // Serial.print("\nZ= ");
+  // Serial.println(ZValue);
+  String z_string = String(final_z);
+  return z_string;
+  // }
+}
 
+String read_Y() {
+  // float accel_yy = xl.readYData();
+  // if (isnan(accel_yy)) {
+  //   Serial.println("Failed to read from BME280 sensor!");
+  //   return "";
+  // }
+  // else {
+  //   Serial.println(accel_yy);
+  //   return String(accel_yy);
+  // }
+  String y_string = String(final_y);
+  return y_string;
+}
 
+String read_X() {
+  // float accel_xx = xl.readXData();
+  // if (isnan(accel_xx)) {
+  //   Serial.println("Failed to read from BME280 sensor!");
+  //   return "";
+  // }
+  // else {
+  //   Serial.println(accel_xx);
+  //   return String(accel_xx);
+  // }
+  String x_string = String(final_x);
+  return x_string;
+}
 
+String read_HR_data() {
+  // Serial.println(HR);
+  String HR_string = String(HR);
+  return HR_string;
+}
+
+String read_SPo2_data() {
+  // Serial.println(SpO2);
+  String SpO2_string = String(SpO2);
+  return SpO2_string;
+}
+
+String read_eucl_d() {
+  Serial.println(eucl_d);
+  eucl_d = sqrt(pow(final_x,2) + pow(final_y,2) + pow(final_z,2) );
+  return String(eucl_d);
+}
 
 void setup()
 {
@@ -155,16 +237,20 @@ void setup()
       ;
   }
   byte ledBrightness = 0xDF;                                                             // Options: 0=Off to 255=50mA  --> DF=~44mA
-  byte sampleAverage = 2;                                                                // Options: 1, 2, 4, 8, 16, 32
+  byte sampleAverage = 8;                                                                // Options: 1, 2, 4, 8, 16, 32
   byte ledMode = 3;                                                                      // Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
   int sampleRate = 200;                                                                  // Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
   int pulseWidth = 411;                                                                  // Options: 69, 118, 215, 411
-  int adcRange = 2048;                                                                   // Options: 2048, 4096, 8192, 16384
+  int adcRange = 16384;                                                                   // Options: 2048, 4096, 8192, 16384
   Sensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); // Configure sensor with these settings
-  Sensor.setPulseAmplitudeRed(0xFF);                                                     // if the value was 0, here we basically turn off the red LED, so green and IR LEDs are active
+  Sensor.setPulseAmplitudeRed(0xDF);
+  Sensor.setPulseAmplitudeIR(0xDF); //if the value was 0, here we basically turn off the red LED, so green and IR LEDs are active
+  Sensor.setPulseAmplitudeGreen(0);
+  //initialize it by expecting the device to be still
+  // Sensor.setPulseAmplitudeRed(0xFF);                                                     // if the value was 0, here we basically turn off the red LED, so green and IR LEDs are active
   // now that I changed the value to 0xFF it means that all the LEDs are on at the same time
   //***Firebase section
-    connectToWiFi(&aaa);
+    // connectToWiFi(&aaa);
     // config.api_key = API_KEY;
     // config.database_url = DATABASE_URL;
     // if (Firebase.signUp(&config, &auth, "", "")){
@@ -227,23 +313,65 @@ void setup()
   //       taskCoreAccel
   //   );
   }
+  //the next section is for the html website
+  //SPIFFS is used to upload data (the html file) to the ESP32
+  if(!SPIFFS.begin()){
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+  SPIFFS.begin();
+  // WiFi.mode(WIFI_STA); //sets it to station mode
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
+  Serial.println("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/Index.html");
+  });
+  server.on("/Zz", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", read_Z().c_str());
+  });
+  server.on("/Yy", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", read_Y().c_str());
+  });
+  server.on("/Xx", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", read_X().c_str());
+  });
+  server.on("/hr", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", read_HR_data().c_str());
+  });
+  server.on("/SPo2", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", read_SPo2_data().c_str());
+  });
+  server.on("/eucld", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", read_eucl_d().c_str());
+  });
+
+  server.begin();
+
+  // vTaskDelete(NULL); //delete this task to save resources
 }
 
-void myIntTask(void *p){
-  while(1){
-    vTaskSuspend(NULL); //this interrupt task suspends itself
-    //here I turn off the red,IR led
-    Serial.print("\t i turn off the red, ir LED.\n");
-    // Sensor.setPulseAmplitudeRed(0); 
-    // Sensor.setPulseAmplitudeIR(0);  
-  }
-}
+// void myIntTask(void *p){
+//   while(1){
+//     vTaskSuspend(NULL); //this interrupt task suspends itself
+//     //here I turn off the red,IR led
+//     Serial.print("\t i turn off the red, ir LED.\n");
+//     // Sensor.setPulseAmplitudeRed(0); 
+//     // Sensor.setPulseAmplitudeIR(0);  
+//   }
+// }
 
 void loop()
 {
   vTaskDelete(NULL); //delete this task to save resources
 }
-
+/*
 void connectToWiFi(void *parameters)
 {
   for (;;)
@@ -272,9 +400,10 @@ void connectToWiFi(void *parameters)
       Serial.print(WiFi.localIP());
       break;
     }
+    vTaskDelete(NULL); //delete this task to save resources
   }
 }
-
+*/
 void measurementsAccel(void *parameters)
 { // accel
   // EventBits_t uxReturn;
@@ -298,12 +427,8 @@ void measurementsAccel(void *parameters)
     for (int i = 0; i < num_samples_accel; i++)
     {
       xl.readXYZTData(XValue, YValue, ZValue, Temperature);
-      arr_x[i] = XValue;
-      arr_y[i] = YValue;
-      arr_z[i] = ZValue;
-      sumx += arr_x[i];
-      sumy += arr_y[i];
-      sumz += arr_z[i];
+      arr_x[i] = XValue;      arr_y[i] = YValue;      arr_z[i] = ZValue;
+      sumx += arr_x[i];      sumy += arr_y[i];      sumz += arr_z[i];
       // Serial.print("i: "); Serial.print(i); Serial.println();
       if ((i > 0) && (arr_x[i] > arr_x[i - 1] + 50 || arr_y[i] > arr_y[i - 1] + 50 || arr_z[i] > arr_z[i - 1] + 50))
       {                    // 50 is a threshold I found about movement detection, can be modified
@@ -332,7 +457,8 @@ void measurementsAccel(void *parameters)
       Serial.print("\tz: ");    Serial.print(final_z);    Serial.print(" \n");
       
       Sensor.setPulseAmplitudeRed(0); //I turn off the IR and the red LEDs
-      Sensor.setPulseAmplitudeIR(0);  
+      Sensor.setPulseAmplitudeIR(0); 
+      Sensor.setPulseAmplitudeGreen(0xDF);
       // t_off = millis();
       Serial.print("\tt_off: ");    Serial.print(t_accel);    Serial.print(" \n");
     }
@@ -343,11 +469,12 @@ void measurementsAccel(void *parameters)
       Serial.print("\ty: ");    Serial.print(final_y);    Serial.print(" ");
       Serial.print("\tz: ");    Serial.print(final_z);    Serial.print(" \n");
 
-      Sensor.setPulseAmplitudeRed(0xFF); //turn on red
-      Sensor.setPulseAmplitudeIR(0xFF); //turn on ir //green stays on in all occasions
+      Sensor.setPulseAmplitudeRed(0xDF); //turn on red
+      Sensor.setPulseAmplitudeIR(0xDF); //turn on ir 
+      Sensor.setPulseAmplitudeGreen(0);
       Serial.print("\tred, ir are on again t_off: ");    Serial.print(t_accel);    Serial.print(" \n");
     }
-    xEventGroupSetBits(EventGroupHandle, TX1_BIT); //to set the bit to unlock the HR and the SpO2 task
+    xEventGroupSetBits(EventGroupHandle, TX1_BIT); //to set the bit to unlock the HR, SpO2 task
     // until here it is the functional code of the thread, now I checkin with other threads
     bits = xEventGroupSync(EventGroupHandle, GROUPSYNC0_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
     if (bits != ALL_SYNC_BITS)
@@ -362,38 +489,6 @@ void measurementsAccel(void *parameters)
     }
     syncpos++;
     count_accel++;
-    // xSemaphoreGive(baton); //in order to write well in serial monitor, as it is a common resource
-
-    // xEventGroupWaitBits(
-    //       EventGroupHandle,
-    //       BIT_0 | BIT_4,
-    //       pdTRUE,
-    //       pdFALSE,
-    //       portMAX_DELAY);
-    /* Perform task functionality here. */
-
-    /* Set bit 0 in the event group to note this task has reached the
-    sync point.  The other two tasks will set the other two bits defined
-    by ALL_SYNC_BITS.  All three tasks have reached the synchronisation
-    point when all the ALL_SYNC_BITS are set.  Wait a maximum of 100ms
-    for this to happen. */
-    // uxReturn = xEventGroupSync( xEventBits,
-    //                                 TASK_0_BIT,
-    //                                 ALL_SYNC_BITS,
-    //                                 xTicksToWait );
-    // if( ( uxReturn & ALL_SYNC_BITS ) == ALL_SYNC_BITS )
-    // {
-    //   Serial.print("ok");
-    //         /* All three tasks reached the synchronisation point before the call
-    //         to xEventGroupSync() timed out. */
-    // }
-    // i did all I wanted to do in this task, now I send the done_1_flag and wait for other tasks
-    // Serial.print("txpos_accel: "); Serial.print(syncpos); Serial.println();
-    // xEventGroupSetBits(EventGroupHandle, TX1_BIT);
-    // // xEventGroupSync( xEventBits, TASK_2_BIT, ALL_SYNC_BITS, portMAX_DELAY );
-    // vTaskDelay(10000/portTICK_PERIOD_MS);
-    // txpos++;
-    // vTaskDelay(Sampling_Time / portTICK_PERIOD_MS); //maybe
   }
 }
 
@@ -407,25 +502,14 @@ void loopHR(void *parameters)
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     // double t_HR = millis();
     t_HR = millis();
-    // xSemaphoreTake(baton, portMAX_DELAY);
     // Serial.println("HR has began");
     Serial.print("t_HR: ");
     Serial.print(t_HR);
     Serial.println();
-    //will remove it here, put it in accel
-    // if (flag_movement)
-    // {
-    //   Sensor.setPulseAmplitudeRed(0); //I turn off the IR and the red LEDs
-    //   Sensor.setPulseAmplitudeIR(0);    
-    // }
-    // else
-    // {
-    //   Sensor.setPulseAmplitudeRed(0xFF); //turn on red
-    //   Sensor.setPulseAmplitudeIR(0xFF); //turn on ir //green stays on in all occasions
-    // }
-    xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
-    //this means tha tthe HR task waits to see if there is movement from the accel task
-    int flag = readSamples();
+
+    xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY); //wait for movement detection to be done
+    //this means tha the HR task waits to see if there is movement from the accel task
+    flag = readSamples();
     if (flag)
     { //***if sensor reads real data
       iir_ma_filter_for_hr();
@@ -446,11 +530,11 @@ void loopHR(void *parameters)
     Serial.print("\nthe HR task took to execute: ms : "); Serial.print(millis() - t_HR); Serial.println();
     Serial.println();
     Serial.println("----------------------------------------------------------------------------------------------------");
-
-    // xSemaphoreGive(baton);
+    // xEventGroupSetBits(EventGroupHandle, TX3_BIT); //to send to SpO2 to get activated
+    //SpO2 and HR can run exactly at the same time
     bits = xEventGroupSync(EventGroupHandle, GROUPSYNC1_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
     if (bits != ALL_SYNC_BITS)
-    { // xWaitForAllBits == pdTRUE, so we wait for TX1_BIT and TX2_BIT so all other is timeout
+    { 
       Serial.println("\tfail to receive synct eventgroup value");
     }
     else
@@ -459,10 +543,6 @@ void loopHR(void *parameters)
     }
     syncpos++;
     count_HR++;
-    // could we need a tiny delay here?
-    //  delay(10);
-    // or better vTaskDelay
-    // vTaskDelay(10 / portTICK_PERIOD_MS); // just 10ms delay. no need, no reason
   }
 }
 /* SpO2 */
@@ -475,18 +555,19 @@ void loopSpO2(void *parameters)
   {
     vTaskDelay(1000 / portTICK_PERIOD_MS); // 1000 milliseconds
     t_SpO2 = millis();
-    // xSemaphoreTake(baton, portMAX_DELAY);
     // Serial.println("SpO2 has began");
     Serial.print("t_SpO2: ");
     Serial.print(t_SpO2);
     Serial.println();
-    xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
-    //this means tha tthe HR task waits to see if there is movement from the accel task
-    if (flag_movement != 1)
+    //wait for HR task to be done. no need to
+    // xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX3_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
+    xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY); //from accel to HR and SpO2
+    //this means tha tthe SpO2 task waits to see if there is movement from the accel task
+    // int flag_plugged = readSamples(); //doesnt work, compleetely crashed the thread
+    if (flag_movement == 0 )
     { // calculate the SpO2 only if the finger is plugged, name of the flag is counterintuitive
       int mean_ir = Find_Mean(0, Num_Samples, ma_ir2_buffer);
       int mean_red = Find_Mean(0, Num_Samples, ma_red_buffer);
-
       //***detect successive peaks and mins
       for (int i = 0; i < points_spo2; i++)
       {
@@ -496,20 +577,17 @@ void loopSpO2(void *parameters)
         SpO2_ac_red[i] = 0;
         Oxy[i] = 0;
       }
-
       int p_ir = 0;
       int p_red = 0;
       int peak_ir = 0;
       int peak_red = 0;
       int m_ir = 0;
       int m_red = 0;
-
       for (int j = 101; j < 350; j++)
       {
         //***Find peaks and means for IR
         if (ma_ir2_buffer[j] > ma_ir2_buffer[j - 1] && ma_ir2_buffer[j] > ma_ir2_buffer[j + 1] && ma_ir2_buffer[j] > mean_ir && peak_ir == 0)
         {
-
           /*Serial.print("peak  ir: ");
           Serial.print(ma_ir2_buffer[j]);
           Serial.println();*/
@@ -518,7 +596,6 @@ void loopSpO2(void *parameters)
           p_ir %= points_spo2; // Wrap variable
           peak_ir = 1;
         }
-
         if (ma_ir2_buffer[j] < ma_ir2_buffer[j - 1] && ma_ir2_buffer[j] < ma_ir2_buffer[j + 1] && ma_ir2_buffer[j] < mean_ir && peak_ir == 1)
         {
           /*Serial.print("min  ir: ");
@@ -529,7 +606,6 @@ void loopSpO2(void *parameters)
           m_ir %= points_spo2; // Wrap variable
           peak_ir = 0;
         }
-
         //***Find peaks and means for RED
         if (ma_red_buffer[j] > ma_red_buffer[j - 1] && ma_red_buffer[j] > ma_red_buffer[j + 1] && ma_red_buffer[j] > mean_red && peak_red == 0)
         {
@@ -539,7 +615,6 @@ void loopSpO2(void *parameters)
           p_red %= points_spo2; // Wrap variable
           peak_red = 1;
         }
-
         if (ma_red_buffer[j] < ma_red_buffer[j - 1] && ma_red_buffer[j] < ma_red_buffer[j + 1] && ma_red_buffer[j] < mean_red && peak_red == 1)
         {
 
@@ -549,10 +624,8 @@ void loopSpO2(void *parameters)
           peak_red = 0;
         }
       }
-
       for (int i = 1; i < points_spo2; i++)
       {
-
         if (SpO2_ac_ir[i] != 0 && SpO2_ac_red[i] != 0)
         {
           float R = (float(SpO2_ac_red[i]) / float(SpO2_dc_red[i])) / (float(SpO2_ac_ir[i]) / float(SpO2_dc_ir[i]));
@@ -562,10 +635,8 @@ void loopSpO2(void *parameters)
           // Serial.println();
         }
       }
-
       float sumSP = 0;
       int cSP = 0;
-
       for (int i = 1; i < points_spo2; i++)
       {
 
@@ -580,11 +651,6 @@ void loopSpO2(void *parameters)
       {
         SpO2_next = sumSP / cSP;
       }
-
-      // Serial.print("SpO2 predicted: ");
-      // Serial.print(SpO2_next);
-      // Serial.println();
-
       if (SpO2_next > 84 && SpO2_next <= 100)
       {
         if (SpO2_next - SpO2_previous < -4)
@@ -603,7 +669,7 @@ void loopSpO2(void *parameters)
       }
 
       SpO2 = int(round(SpO2_next));
-      if (flag_unplugged == 0 || HR == 0)
+      if (/*flag_unplugged == 0 */ HR == 0 || flag ==0)
       { // if unplugged show this
         SpO2 = 0; //to show at firebase
         Serial.println();
@@ -934,7 +1000,7 @@ void ComputeHeartRate()
     if (ma_gr_buffer[j] > ma_gr_buffer[j - 1] && ma_gr_buffer[j] > ma_gr_buffer[j + 1] && ma_gr_buffer[j] > Mean_Magnitude && Peak == 0)
     {
       Peak = ma_gr_buffer[j];
-      Index = j;
+      Index = j*40;
     }
 
     //***Search for next peak
@@ -943,13 +1009,13 @@ void ComputeHeartRate()
     {
       if (ma_gr_buffer[j] > ma_gr_buffer[j - 1] && ma_gr_buffer[j] > ma_gr_buffer[j + 1] && ma_gr_buffer[j] > Mean_Magnitude)
       {
-        float d = j - Index;
-        float pulse = (float)samp_freq * 60 / d; // bpm for each PEAK interval
+        float d = (j*40) - Index;
+        float pulse=(float)60000/d;  // bpm for each PEAK interval
         PR[p] = pulse;
         p++;
         p %= points_pr; // Wrap variable
         Peak = ma_gr_buffer[j];
-        Index = j;
+        Index = j*40;
       }
     }
   }
@@ -995,19 +1061,27 @@ void ComputeHeartRate()
 
 int readSamples()
 {
-  int flag = 1;
+  int flagg = 1;
   for (uint32_t i = 0; i < Num_Samples; i++)
   {
-    // read max30105
-    gr_buffer[i] = Sensor.getGreen();
-    // Sensor.nextSample();
-    if (gr_buffer[i] < 10000)
-    {
-      flag = 0;
+    if (flag_movement){
+      gr_buffer[i] = Sensor.getGreen(); //if there is movement, then take samples using the green light only
+      if (gr_buffer[i] < 1000) {
+        flagg =0; 
+      }
     }
+    else {
+      gr_buffer[i] = Sensor.getIR();
+      if (gr_buffer[i] < 10000) {
+        flagg = 0; //if the flag = 0, this means that the finger is unplugged 
+      }
+    }
+    //debugging
+    // Serial.print("\nflag = "); Serial.print(flag); Serial.print("\t");
+    // Serial.print("get IR = "); Serial.print(gr_buffer[i]); Serial.print("\n");
     delay(40);
   }
-  return flag;
+  return flagg;
 }
 
 // end
