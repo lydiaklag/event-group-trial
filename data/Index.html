@@ -32,7 +32,7 @@
     <div id="chart-Xx" class="container"></div>
     <div id="chart-Yy" class="container"></div>
   <div id="chart-Zz" class="container"></div>
-  <h2>Euclidean distance</h2>
+  <h2>Euclidean norm of acceleration</h2>
   <div id="chart-eucl" class="container"></div>
   </div>
   <div class="column" style="background-color:#cac;">
@@ -236,7 +236,7 @@ setInterval(function ( ) {
 
 var charteucld = new Highcharts.Chart({
   chart:{ renderTo : 'chart-eucl' },
-  title: { text: 'Euclidean distance' },
+  title: { text: 'Euclidean norm of acceleration' },
   series: [{
     showInLegend: false,
     data: []
@@ -251,7 +251,7 @@ var charteucld = new Highcharts.Chart({
     dateTimeLabelFormats: { second: '%H:%M:%S' }
   },
   yAxis: {
-    title: { text: 'Euclidean distance' }
+    title: { text: 'Euclidean norm' }
   },
   credits: { enabled: false }
 });

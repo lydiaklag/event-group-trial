@@ -77,7 +77,7 @@ const int Num_Samples = 100; // it stores 4 sec
 uint32_t gr_buffer[Num_Samples];
 int filtered_gr_buffer[Num_Samples];
 int ma_gr_buffer[Num_Samples];
-const int points_pr = 4;
+const int points_pr = 10;
 float PR[points_pr];
 float Pulse_Rate_next = 0, Pulse_Rate_previous = 70;
 int HR;
@@ -90,8 +90,8 @@ int Moving_Average_Num = 2;
 int Num_Points = 2 * Moving_Average_Num + 1; //***5-point moving average filter
 int Sum_Points;
 void *ax;
-int Sampling_Time = 2400; // 2400ms = 4s
-int flag_unplugged = 1;   // 0 means unplugged
+// int Sampling_Time = 2400; // 2400ms = 4s
+// int flag_unplugged = 1;   // 0 means unplugged
 // regarding SpO2, initialising global variables
 const int points_spo2 = 4;
 double SpO2_dc_ir[points_spo2]; // no need to initialise the arrays, that is done inside the SpO2 func
@@ -424,12 +424,15 @@ void measurementsAccel(void *parameters)
 
     sumx = sumy = sumz = 0; // resetting the sums
     flag_movement = 0;      // resetting the flag
+    int howmanyactualsamples = 0;
     for (int i = 0; i < num_samples_accel; i++)
     {
       xl.readXYZTData(XValue, YValue, ZValue, Temperature);
-      arr_x[i] = XValue;      arr_y[i] = YValue;      arr_z[i] = ZValue;
+      //norm
+      arr_x[i] = XValue + 65;      arr_y[i] = YValue;      arr_z[i] = ZValue +815;
       sumx += arr_x[i];      sumy += arr_y[i];      sumz += arr_z[i];
       // Serial.print("i: "); Serial.print(i); Serial.println();
+      howmanyactualsamples ++;
       if ((i > 0) && (arr_x[i] > arr_x[i - 1] + 50 || arr_y[i] > arr_y[i - 1] + 50 || arr_z[i] > arr_z[i - 1] + 50))
       {                    // 50 is a threshold I found about movement detection, can be modified
         flag_movement = 1; // a bit like a flag
@@ -445,9 +448,12 @@ void measurementsAccel(void *parameters)
     }
     // now I am out of the loop
     // Serial.println("temp: "); Serial.print(Temperature); Serial.println();
-    final_x = sumx / num_samples_accel;
-    final_y = sumy / num_samples_accel;
-    final_z = sumz / num_samples_accel;
+    // final_x = sumx / num_samples_accel;
+    // final_y = sumy / num_samples_accel;
+    // final_z = sumz / num_samples_accel;
+    final_x = sumx / howmanyactualsamples;
+    final_y = sumy / howmanyactualsamples;
+    final_z = sumz / howmanyactualsamples;
     // distance = sqrt(pow(final_x, 2) + pow(final_y, 2) + pow(final_z,2));
     if (flag_movement)
     { // do something in the HR loop
