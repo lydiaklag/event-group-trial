@@ -36,7 +36,7 @@
 // #define WIFI_SSID "secret passage_plus"
 
 #define WIFI_NETWORK "YellowCafe" 
-#define WIFI_PASSWORD "Colombia1"        
+#define WIFI_PASSWORD "Colombia1"         
 #define WIFI_TIMEOUT_MS 20000
 #define WIFI_SSID "YellowCafe"
 
@@ -201,6 +201,10 @@ String read_X() {
   //   Serial.println(accel_xx);
   //   return String(accel_xx);
   // }
+String taskMessage = "Task running on core ";
+taskMessage = taskMessage + xPortGetCoreID();
+Serial.print(taskMessage); //just checking if that works
+
   String x_string = String(final_x);
   return x_string;
 }
