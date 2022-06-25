@@ -24,21 +24,20 @@
 #include <SPIFFS.h>
 #include <Adafruit_Sensor.h>
 
-#include <HTTPSServer.hpp>
-#include <SSLCert.hpp>
-#include <HTTPRequest.hpp>
-#include <HTTPResponse.hpp>
-
-
 // #define WIFI_NETWORK "secret passage_plus" // the name of the wifi network //at lab it is ESP_Test
 // #define WIFI_PASSWORD "Afra!17p89#"        // at lab it is esp8266_test
 // #define WIFI_TIMEOUT_MS 20000
 // #define WIFI_SSID "secret passage_plus"
 
-#define WIFI_NETWORK "YellowCafe" 
-#define WIFI_PASSWORD "Colombia1"         
+#define WIFI_NETWORK "secret passage" // the name of the wifi network //at lab it is ESP_Test
+#define WIFI_PASSWORD "Afra!17p89#"        // at lab it is esp8266_test
 #define WIFI_TIMEOUT_MS 20000
-#define WIFI_SSID "YellowCafe"
+#define WIFI_SSID "secret passage"
+
+// #define WIFI_NETWORK "YellowCafe" 
+// #define WIFI_PASSWORD "Colombia1"         
+// #define WIFI_TIMEOUT_MS 20000
+// #define WIFI_SSID "YellowCafe"
 
 // Your Firebase Project Web API Key
 #define API_KEY "AIzaSyAIE_5ozQRoAcZaprySgTDVu_YB7QJycik"
@@ -114,7 +113,7 @@ bool signupOK = false;
 
 // unsigned long t_accel;
 // int Sampling_Time = 2400;  //(sampl_time =40ms-->25 samples/sec--> fs=25Hz
-int Sampling_Time_accel = 500; // now I made the accel freq f=2hz or T = 0.5s) //because the HR task takes 5,03s to get a result
+int Sampling_Time_accel = 250; // now I made the accel freq f=2hz or T = 0.5s) //because the HR task takes 5,03s to get a result
 // that means that for each second, I take 2 samples (2 Hz = 2 samples/s)
 int flag_movement = 0; // if 0 : no movement. if 1 : movement
 // when we detect movement, the variable movement will become 1, then we will turn off the red, IR LED (HR task)
@@ -125,7 +124,7 @@ int16_t XValue, YValue, ZValue, Temperature;
 // void *a;
 static int taskCore = 1;
 int distance;
-const int num_samples_accel = 9; //make it smaller 
+const int num_samples_accel = 5; //make it smaller 
 int arr_x[num_samples_accel];
 int arr_y[num_samples_accel];
 int arr_z[num_samples_accel];
@@ -201,9 +200,9 @@ String read_X() {
   //   Serial.println(accel_xx);
   //   return String(accel_xx);
   // }
-String taskMessage = "Task running on core ";
-taskMessage = taskMessage + xPortGetCoreID();
-Serial.print(taskMessage); //just checking if that works
+// String taskMessage = "Task running on core ";
+// taskMessage = taskMessage + xPortGetCoreID();
+// Serial.print(taskMessage); //just checking if that works
 
   String x_string = String(final_x);
   return x_string;
@@ -357,7 +356,8 @@ void setup()
   });
 
   server.begin();
-
+  // Serial.print("setup() running on core ");
+  // Serial.println(xPortGetCoreID());
   // vTaskDelete(NULL); //delete this task to save resources
 }
 
@@ -427,7 +427,7 @@ void measurementsAccel(void *parameters)
     Serial.println();
 
     sumx = sumy = sumz = 0; // resetting the sums
-    flag_movement = 0;      // resetting the flag
+    // flag_movement = 0;      // resetting the flag
     int howmanyactualsamples = 0;
     for (int i = 0; i < num_samples_accel; i++)
     {
@@ -449,6 +449,9 @@ void measurementsAccel(void *parameters)
       // what if I use the t_accel
       //  making a for loop that takes samples only at t_accel + 0.5s, using an if
       // ask Maria
+    }
+    if (howmanyactualsamples == num_samples_accel){
+      flag_movement = 0;
     }
     // now I am out of the loop
     // Serial.println("temp: "); Serial.print(Temperature); Serial.println();
@@ -482,9 +485,9 @@ void measurementsAccel(void *parameters)
       Sensor.setPulseAmplitudeRed(0xDF); //turn on red
       Sensor.setPulseAmplitudeIR(0xDF); //turn on ir 
       Sensor.setPulseAmplitudeGreen(0);
-      Serial.print("\tred, ir are on again t_off: ");    Serial.print(t_accel);    Serial.print(" \n");
+      // Serial.print("\tred, ir are on again t_off: ");    Serial.print(t_accel);    Serial.print(" \n");
     }
-    xEventGroupSetBits(EventGroupHandle, TX1_BIT); //to set the bit to unlock the HR, SpO2 task
+    // xEventGroupSetBits(EventGroupHandle, TX1_BIT); //to set the bit to unlock the HR, SpO2 task
     // until here it is the functional code of the thread, now I checkin with other threads
     bits = xEventGroupSync(EventGroupHandle, GROUPSYNC0_BIT, ALL_SYNC_BITS, 60000 / portTICK_RATE_MS); // max wait 60s
     if (bits != ALL_SYNC_BITS)
@@ -513,22 +516,21 @@ void loopHR(void *parameters)
     // double t_HR = millis();
     t_HR = millis();
     // Serial.println("HR has began");
-    Serial.print("t_HR: ");
-    Serial.print(t_HR);
-    Serial.println();
+    Serial.print("t_HR: ");  Serial.println(t_HR);
+    
 
-    xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY); //wait for movement detection to be done
+    // xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY); //wait for movement detection to be done
     //this means tha the HR task waits to see if there is movement from the accel task
     flag = readSamples();
+    // Serial.print("the flag from read samples is: "); Serial.println(flag);
     if (flag)
     { //***if sensor reads real data
+    // Serial.println("hi I am inside the if flag in loop HR, green");
       iir_ma_filter_for_hr();
       int neg = find_min_negative(Moving_Average_Num, Num_Samples - Moving_Average_Num, ma_gr_buffer);
       convert_signal_to_positive(Moving_Average_Num, Num_Samples - Moving_Average_Num, ma_gr_buffer, neg);
       ComputeHeartRate();
-      Serial.print("NEW DATA--> ");
-      Serial.print("HR: ");
-      Serial.print(HR);
+      Serial.print("NEW DATA--> ");      Serial.print("HR: ");      Serial.print(HR);
       // flag_unplugged = 1;
     }
     else
@@ -566,12 +568,9 @@ void loopSpO2(void *parameters)
     vTaskDelay(1000 / portTICK_PERIOD_MS); // 1000 milliseconds
     t_SpO2 = millis();
     // Serial.println("SpO2 has began");
-    Serial.print("t_SpO2: ");
-    Serial.print(t_SpO2);
-    Serial.println();
+    Serial.print("t_SpO2: ");  Serial.println(t_SpO2);
     //wait for HR task to be done. no need to
-    // xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX3_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
-    xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY); //from accel to HR and SpO2
+    // xEventGroupValue = xEventGroupWaitBits(EventGroupHandle, TX1_BIT, pdTRUE, pdTRUE, portMAX_DELAY); //from accel to HR and SpO2
     //this means tha tthe SpO2 task waits to see if there is movement from the accel task
     // int flag_plugged = readSamples(); //doesnt work, compleetely crashed the thread
     if (flag_movement == 0 )
@@ -993,6 +992,7 @@ void ComputeHeartRate()
 {
 
   int Mean_Magnitude = Find_Mean(Moving_Average_Num, Num_Samples - Moving_Average_Num, ma_gr_buffer);
+  // Serial.print("mean magn = "); Serial.println(Mean_Magnitude);
 
   //***detect successive peaks and compute PR
   for (int i = 0; i < points_pr; i++)
@@ -1006,11 +1006,13 @@ void ComputeHeartRate()
   for (int j = Moving_Average_Num; j < Num_Samples - Moving_Average_Num; j++)
   {
     //***Find first peak
-
+// Serial.println("inside first loop == "); 
     if (ma_gr_buffer[j] > ma_gr_buffer[j - 1] && ma_gr_buffer[j] > ma_gr_buffer[j + 1] && ma_gr_buffer[j] > Mean_Magnitude && Peak == 0)
     {
       Peak = ma_gr_buffer[j];
       Index = j*40;
+
+      // Serial.print("peak = "); Serial.println(Peak);
     }
 
     //***Search for next peak
@@ -1026,6 +1028,8 @@ void ComputeHeartRate()
         p %= points_pr; // Wrap variable
         Peak = ma_gr_buffer[j];
         Index = j*40;
+
+        // Serial.print("pulse = "); Serial.println(pulse);
       }
     }
   }
@@ -1076,14 +1080,17 @@ int readSamples()
   {
     if (flag_movement){
       gr_buffer[i] = Sensor.getGreen(); //if there is movement, then take samples using the green light only
+      // Serial.print("get green = "); Serial.println(gr_buffer[i]);
       if (gr_buffer[i] < 1000) {
         flagg =0; 
+        // Serial.println("unplugged green"); 
       }
     }
     else {
       gr_buffer[i] = Sensor.getIR();
       if (gr_buffer[i] < 10000) {
         flagg = 0; //if the flag = 0, this means that the finger is unplugged 
+        // Serial.println("unplugged IR"); 
       }
     }
     //debugging
@@ -1091,6 +1098,7 @@ int readSamples()
     // Serial.print("get IR = "); Serial.print(gr_buffer[i]); Serial.print("\n");
     delay(40);
   }
+  // Serial.print("the flag at the end of readSamples inside is : "); Serial.println(flagg);
   return flagg;
 }
 
